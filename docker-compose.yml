@@ -1,32 +1,68 @@
+# ai-generated: 100% - Claude Code (Fable 5.1) wrote this file from design/LAB1.md sections 1.8 and 7.4; the lecturer ran it
+# Compose contract (LAB1.md section 1.8): service `svcdesk` on 8080 with the test clock on, no bind mounts,
+# a `tests` service under the `tests` profile that runs the suite against SVCDESK_URL.
+# Lab 3 (LAB3.md sections 2 and 4): the `kb-index` dependency, and the local Prometheus and Grafana under the
+# `observability` profile, their configuration baked in by their Dockerfiles (no bind mounts, so Labs 1-2's rule holds).
+#
+#   SVCDESK_PORT=18080 docker compose up --build --wait svcdesk      # publish on another host port
+#   SVCDESK_C1=business docker compose up --wait svcdesk              # switch a resolution (see README.md)
+#   docker compose --profile tests run --rm tests                     # own tests (Stretch S3)
+#   docker compose --profile observability up -d --build             # Prometheus on 9090, Grafana on 3000
+
 services:
   svcdesk:
-    build:
-      context: .
-    container_name: svcdesk
+    build: .
     ports:
-      - "8080:8080"
+      - "${SVCDESK_PORT:-8080}:8080"
     environment:
       SVCDESK_TEST_CLOCK: "1"
-      SVCDESK_DB: "/data/svcdesk.db"
+      SVCDESK_C1: ${SVCDESK_C1:-wallclock}
+      SVCDESK_C2: ${SVCDESK_C2:-immutable}
+      SVCDESK_C3: ${SVCDESK_C3:-vip}
+      SVCDESK_DB: /data/svcdesk.db
+      KB_INDEX_URL: http://kb-index:8080
     volumes:
       - svcdesk-data:/data
-    command: ["python", "/app/src/app.py"]
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request; print(urllib.request.urlopen(\"http://localhost:8080/health\").status)' | grep 200"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
+      test: ["CMD", "python", "-m", "svcdesk.healthcheck"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 3s
+
+  kb-index:
+    image: ghcr.io/swasik/seeded-toxic:2026
+    environment:
+      SEEDED_TOXIC_LOGIN: itsm-reference     # your GitHub login in your repository
+
+  prometheus:
+    build: ./prometheus
+    profiles: ["observability"]
+    ports:
+      - "9090:9090"
+
+  grafana:
+    build: ./grafana
+    profiles: ["observability"]
+    ports:
+      - "3000:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
 
   tests:
+    build: .
     profiles: ["tests"]
-    build:
-      context: .
-    environment:
-      SVCDESK_URL: "http://svcdesk:8080"
-    command: ["python", "/app/src/tests.py"]
     depends_on:
-      - svcdesk
+      svcdesk:
+        condition: service_healthy
+    environment:
+      SVCDESK_URL: ${SVCDESK_URL:-http://svcdesk:8080}
+      # the suite expects the combination the service runs; keep these in step with the svcdesk service
+      SVCDESK_C1: ${SVCDESK_C1:-wallclock}
+      SVCDESK_C2: ${SVCDESK_C2:-immutable}
+      SVCDESK_C3: ${SVCDESK_C3:-vip}
+    command: ["python", "tests/run_tests.py"]
 
 volumes:
   svcdesk-data:
