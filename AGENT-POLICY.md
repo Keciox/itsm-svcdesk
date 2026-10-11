@@ -1,0 +1,4 @@
+- Bash(rm *): the reviewer reads and comments; deleting files is the author's decision, not the reviewer's.
+- Bash(git push *): review work must stay local and auditable; the author decides when to publish changes.
+- Bash(docker *): container commands are operational and must be approved before they alter the running project state.
+- WebFetch: the reviewer stays inside the repository and local spec documents; remote retrieval is not part of the review workflow.

@@ -1,0 +1,32 @@
+services:
+  svcdesk:
+    build:
+      context: .
+    container_name: svcdesk
+    ports:
+      - "8080:8080"
+    environment:
+      SVCDESK_TEST_CLOCK: "1"
+      SVCDESK_DB: "/data/svcdesk.db"
+    volumes:
+      - svcdesk-data:/data
+    command: ["python", "/app/src/app.py"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; print(urllib.request.urlopen(\"http://localhost:8080/health\").status)' | grep 200"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  tests:
+    profiles: ["tests"]
+    build:
+      context: .
+    environment:
+      SVCDESK_URL: "http://svcdesk:8080"
+    command: ["python", "/app/src/tests.py"]
+    depends_on:
+      - svcdesk
+
+volumes:
+  svcdesk-data:
